@@ -26,27 +26,7 @@ async function processUsersWithFalseFirstConnect(client) {
                     }),
                 })
             );
-            console.log(result)
-
-            // for (const resultElement of result.events) {
-            //     if (resultElement?.action?.className === 'ChannelAdminLogEventActionParticipantJoinByInvite') {
-            //         const inviteLink = resultElement?.action?.invite?.link;
-            //         const inviteTitle = resultElement?.action?.invite?.title;
-            //         const userId = resultElement?.userId;
-            //         const date = resultElement?.date;
-            //         const adminId = resultElement?.action?.invite?.adminId;
-            //
-            //         try {
-            //             await pool.query(
-            //                 'INSERT INTO invitation_links (link, user_id, admin_id, link_title, joined_followers, date) VALUES ($1, $2, $3, $4, $5, $6)',
-            //                 [inviteLink, userFirebaseId, parseInt(adminId, 10), inviteTitle, userId, date]
-            //             );
-            //         } catch (e) {
-            //             console.log(e)
-            //         }
-            //
-            //     }
-            // }
+            // console.log(JSON.stringify(result, null, 2));
 
             for (const resultElement of result.events) {
                 if (resultElement?.action?.className === 'ChannelAdminLogEventActionParticipantJoinByInvite') {
@@ -55,6 +35,12 @@ async function processUsersWithFalseFirstConnect(client) {
                     const userId = String(resultElement?.userId);
                     const date = resultElement?.date;
                     const adminId = BigInt(resultElement?.action?.invite?.adminId);
+                    const username = await client.invoke(
+                        new Api.users.GetFullUser({
+                            id: userId,
+                        })
+                    );
+                    // console.log(username?.users[0]?.username);
 
                     try {
                         // Проверяем, существует ли запись с таким inviteLink
@@ -66,9 +52,9 @@ async function processUsersWithFalseFirstConnect(client) {
                         if (existingRecord.rows.length > 0) {
                             // Запись существует, обновляем joined_followers
                             const currentFollowers = existingRecord.rows[0].joined_followers || [];
-
-                            // Проверяем, есть ли уже userId в currentFollowers
-                            if (!currentFollowers.includes(userId)) {
+                            const currentUsrNames = existingRecord.rows[0].usernames || [];
+                            // Проверяем, есть ли уже userId в currentFollowers и не найден ли твой же элемент в юзернеймах
+                            if (!currentFollowers.includes(userId) && !currentUsrNames.includes(username?.users[0]?.username)) {
                                 // Если нет, добавляем userId
                                 currentFollowers.push(userId);
 
@@ -80,8 +66,8 @@ async function processUsersWithFalseFirstConnect(client) {
                         } else {
                             // Запись не существует, создаем новую
                             await pool.query(
-                                'INSERT INTO invitation_links (link, user_id, admin_id, link_title, joined_followers, date) VALUES ($1, $2, $3, $4, $5, $6)',
-                                [inviteLink, userFirebaseId, parseInt(adminId, 10), inviteTitle, [userId], date]
+                                'INSERT INTO invitation_links (link, user_id, admin_id, link_title, joined_followers, date, usernames) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                                [inviteLink, userFirebaseId, parseInt(adminId, 10), inviteTitle, [userId], date, [username?.users[0]?.username]]
                             );
                         }
                     } catch (e) {
@@ -126,7 +112,7 @@ async function main() {
         } catch (error) {
             console.error('Ошибка при выполнении processUsersWithFalseFirstConnect:', error);
         }
-    }, 3 * 1000);
+    }, 10 * 1000);
 
 }
 
